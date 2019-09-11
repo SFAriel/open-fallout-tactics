@@ -7,7 +7,7 @@ local BufferStream = require("stream.buffer_stream")
 local Object = require("lib.classic")
 local Cache = require("util.cache")
 local timer = require("util.timer")
-local BOSArchive = require("bos-archive")
+local BOSArchive = require("bos.archive")
 local spriteEvents = require("sprite.event").constants
 
 local Sprite = Object:extend()

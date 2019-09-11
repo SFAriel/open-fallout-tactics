@@ -1,6 +1,6 @@
 local colors = require("colors")
 local timer = require("util.timer")
-local BOSArchive = require("bos-archive")
+local BOSArchive = require("bos.archive")
 local Sprite = require("sprite")
 local spriteEvent = require("sprite.event")
 
