@@ -43,52 +43,121 @@ local DWORD_BUFFER = ffi.typeof("DWORD[1]")
 local LPBYTE = ffi.typeof("LPBYTE")
 local LPBYTE_ARRAY = ffi.typeof("LPBYTE[?]")
 
-local HKEY_LOCAL_MACHINE = ffi.cast(HKEY, ffi.cast("uintptr_t", 0x80000002))
-local KEY_READ = 0x20019
+local HIVE = {
+  HKEY_LOCAL_MACHINE = ffi.cast(HKEY, ffi.cast("uintptr_t", 0x80000002))
+}
 
-local WindowsRegistry = {}
+local ACCESS_TYPE = {
+  KEY_READ = 0x20019
+}
 
-WindowsRegistry.HKEY_LOCAL_MACHINE = HKEY_LOCAL_MACHINE
+local VALUE_TYPES = {
+  REG_SZ = 1
+}
+
+local ERROR_CODE = {
+  SUCCESS = 0,
+  FILE_NOT_FOUND = 2,
+  MORE_DATA = 234
+}
+
+local ERROR_MESSAGE = {
+  [ERROR_CODE.FILE_NOT_FOUND] = "could not find registry key",
+  [ERROR_CODE.MORE_DATA] = "could not fit result into allocated buffer"
+}
+
+local function getError(code)
+  if ERROR_MESSAGE[code] then
+    return ERROR_MESSAGE[code]
+  end
+
+  return "error code " .. code
+end
 
 local function RegOpenKeyExA(handle, keyPath, options, accessMask)
   local keyHandle = HKEY_BUFFER()
-  local result = advapi32.RegOpenKeyExA(handle, keyPath, 0, KEY_READ, keyHandle)
+  local result = advapi32.RegOpenKeyExA(handle, keyPath, 0, ACCESS_TYPE.KEY_READ, keyHandle)
 
-  assert(result == 0, "Something went wrong in RegOpenKeyExA")
+  if result ~= ERROR_CODE.SUCCESS then
+    return false, "RegOpenKeyExA failed, " .. getError(result)
+  end
 
   return keyHandle[0]
 end
 
+local conversions = {
+  [VALUE_TYPES.REG_SZ] = function(pointer, size)
+    return ffi.string(pointer, size - 1) -- ignore terminating null
+  end
+}
+
+local function convertRegistryValue(pointer, size, typeOfValue)
+  local converter = conversions[typeOfValue]
+
+  if not converter then
+    error("no conversion found for " .. typeOfValue)
+  end
+
+  return converter(pointer, size)
+end
+
 local function RegQueryValueExA(handle, key, resultBufferSize)
-  local typeOf = DWORD_BUFFER()
+  local typeOfValue = DWORD_BUFFER()
   local valueBuffer = LPBYTE_ARRAY(resultBufferSize)
   local valuePointer = ffi.cast(LPBYTE, valueBuffer)
   local bufferSize = DWORD_BUFFER()
 
   bufferSize[0] = resultBufferSize
 
-  local result = advapi32.RegQueryValueExA(handle, key, nil, typeOf, valuePointer, bufferSize)
+  local result = advapi32.RegQueryValueExA(handle, key, nil, typeOfValue, valuePointer, bufferSize)
 
-  assert(result == 0, "Something went wrong in RegQueryValueExA")
+  if result ~= ERROR_CODE.SUCCESS then
+    return false, "RegQueryValueExA failed, " .. getError(result)
+  end
 
-  return valuePointer, bufferSize[0], typeOf[0]
+  return convertRegistryValue(valuePointer, bufferSize[0], typeOfValue[0])
 end
 
 local function RegCloseKey(handle)
   local result = advapi32.RegCloseKey(handle)
 
-  assert(result == 0, "Something went wrong in RegCloseKey")
+  if result ~= ERROR_CODE.SUCCESS then
+    return false, "RegCloseKey failed, " .. getError(result)
+  end
 end
 
-function WindowsRegistry.queryKey(handle, keyPath, key, resultBufferSize)
+local function getHandleAndKeyPath(fullPath)
+  local hiveName, keyPath = fullPath:match("([%a_]-)\\(.*)")
+  local handle = HIVE[hiveName]
+
+  if not handle then
+    error("hive not found: " .. hiveName)
+  end
+
+  return handle, keyPath
+end
+
+local WindowsRegistry = {}
+
+function WindowsRegistry.queryKey(fullPath, key, resultBufferSize)
   resultBufferSize = resultBufferSize or 1024
 
-  local keyHandle = RegOpenKeyExA(handle, keyPath, 0, KEY_READ)
-  local valuePointer, valueSize = RegQueryValueExA(keyHandle, key, resultBufferSize)
+  local handle, keyPath = getHandleAndKeyPath(fullPath)
+  local keyHandle, err = RegOpenKeyExA(handle, keyPath, 0, ACCESS_TYPE.KEY_READ)
+
+  if err then
+    return false, err
+  end
+
+  local value, err = RegQueryValueExA(keyHandle, key, resultBufferSize)
 
   RegCloseKey(keyHandle)
 
-  return ffi.string(valuePointer, valueSize)
+  if err then
+    return false, err
+  end
+
+  return value
 end
 
 return WindowsRegistry
