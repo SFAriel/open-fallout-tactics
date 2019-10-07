@@ -1,6 +1,6 @@
 local ffi = require("ffi")
 
-pcall(ffi.cdef, [[
+ffi.cdef [[
   struct dirent {
     unsigned long  d_ino;       /* inode number */
     unsigned long  d_off;       /* not an offset */
@@ -12,12 +12,12 @@ pcall(ffi.cdef, [[
   struct DIR *opendir(const char *name);
   struct dirent *readdir(struct DIR *dirstream);
   int closedir (struct DIR *dirstream);
-]])
+]]
 
-local PosixDir = {}
+local dir = {}
 
-function PosixDir.list(absolutePath)
-  error("function call PosixDir.list not implemented")
+function dir.list(absolutePath)
+  error("not implemented")
 end
 
-return PosixDir
+return dir

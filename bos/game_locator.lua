@@ -1,6 +1,5 @@
 local ffi = require("ffi")
-local IS_WINDOWS = ffi.os == "Windows"
-local WindowsRegistry = IS_WINDOWS and require("ffi.winreg")
+local Registry = ffi.abi("win") and require("ffi.win.reg") or require("ffi.posix.reg")
 
 local FOT_REGISTRY_KEYS = {
   {
@@ -11,21 +10,11 @@ local FOT_REGISTRY_KEYS = {
 
 local GameLocator = {}
 
-local function locationIsValid(path)
-  if not path then
-    return false
-  end
-
-  return true
-end
-
 function GameLocator.getAbsolutePath()
-  if not IS_WINDOWS then return end
-
   for _, registry in pairs(FOT_REGISTRY_KEYS) do
-    local location, err = WindowsRegistry.queryKey(registry.path, registry.key)
+    local location, err = Registry.queryKey(registry.path, registry.key)
 
-    if locationIsValid(location) then
+    if location then
       return location
     end
   end

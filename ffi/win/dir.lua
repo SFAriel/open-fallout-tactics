@@ -71,9 +71,9 @@ local function normalizePath(path)
   return path:gsub("/", "\\")
 end
 
-local WinDir = {}
+local dir = {}
 
-function WinDir.list(absolutePath)
+function dir.list(absolutePath)
   local items = {}
   local findData = ffi.new(WIN32_FIND_DATA)
   local fileHandle = ffi.C.FindFirstFileW(stringToWideString(normalizePath(absolutePath) .. "\\*"), findData)
@@ -97,4 +97,4 @@ function WinDir.list(absolutePath)
   return items
 end
 
-return WinDir
+return dir

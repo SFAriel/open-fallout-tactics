@@ -1,21 +1,33 @@
 local Object = require("lib.classic")
 local ffi = require("ffi")
 local ffiTypes = require("ffi.types")
+local ByteData = require("stream.byte_data")
+local File = ffi.abi("win") and require("ffi.win.file") or require("ffi.posix.file")
 
 local FileStream = Object:extend()
 
-function FileStream:new(file)
-  self.file = file
+function FileStream:new(path, mode)
+  self.file = File.open(path, mode)
 end
 
 function FileStream.open(path, mode)
-  local file = assert(love.filesystem.newFile(path, mode or "r"))
-
-  return FileStream(file)
+  return FileStream(path, mode)
 end
 
 function FileStream:getSize()
-  return self.file:getSize()
+  if self.size then
+    return self.size
+  end
+
+  local position = self.file:tell()
+
+  self.file:seek("end")
+
+  self.size = self.file:tell()
+
+  self.file:seek("set", position)
+
+  return self.size
 end
 
 function FileStream:tell()
@@ -23,7 +35,7 @@ function FileStream:tell()
 end
 
 function FileStream:seek(position)
-  return self.file:seek(position)
+  self.file:seek("set", position)
 end
 
 function FileStream:close()
@@ -31,47 +43,57 @@ function FileStream:close()
 end
 
 function FileStream:skip(bytesToSkip)
-  return self.file:seek(self.file:tell() + bytesToSkip)
+  self.file:seek("cur", bytesToSkip)
 end
 
-function FileStream:read(length)
-  return self.file:read(length)
+local function getValidLengthToRead(self, length)
+  local pos = self:tell()
+
+  if pos + length > self:getSize() then
+    length = self:getSize() - pos
+  end
+
+  if length < 1 then
+    error("tried to read " .. length .. " bytes")
+  end
+
+  return length
 end
 
 function FileStream:readByteData(length)
-  return self.file:read("data", length)
+  length = getValidLengthToRead(self, length)
+
+  return ByteData.fromBuffer(self.file:read(ffiTypes.array.uint8_t(length), length))
 end
 
-local uint8_t = ffiTypes.pointer.uint8_t
+function FileStream:readBuffer(length)
+  length = getValidLengthToRead(self, length)
 
-function FileStream:readByte()
-  local byteData = self.file:read("data", 1)
-
-  return uint8_t(byteData:getPointer())[0]
+  return self.file:read(ffiTypes.array.uint8_t(length), length)
 end
 
-local uint32_t = ffiTypes.pointer.uint32_t
-
-function FileStream:readUint()
-  local byteData = self.file:read("data", 4)
-
-  return ffi.cast(uint32_t, byteData:getPointer())[0]
+function FileStream:read(length)
+  return ffi.string(self:readBuffer(length))
 end
 
-local uint16_t = ffiTypes.pointer.uint16_t
+local elementReaders = {
+  readByte = "uint8_t",
+  readUint = "uint32_t",
+  readUshort = "uint16_t",
+  readShort = "int16_t"
+}
 
-function FileStream:readUshort()
-  local byteData = self.file:read("data", 2)
+for funcName, cType in pairs(elementReaders) do
+  local persistentBuffer = ffi.new(cType .. "[1]")
+  local elementSize = ffi.sizeof(persistentBuffer)
 
-  return ffi.cast(uint16_t, byteData:getPointer())[0]
-end
+  local function reader(self)
+    local buffer, length = self.file:read(persistentBuffer, 1, elementSize)
 
-local int16_t = ffiTypes.pointer.int16_t
+    return length > 0 and buffer[0] or nil
+  end
 
-function FileStream:readShort()
-  local byteData = self.file:read("data", 2)
-
-  return ffi.cast(int16_t, byteData:getPointer())[0]
+  FileStream[funcName] = reader
 end
 
 function FileStream:expectSignature(signature)

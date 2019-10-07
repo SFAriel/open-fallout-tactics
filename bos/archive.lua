@@ -1,10 +1,14 @@
+local ffi = require("ffi")
 local zlib = require("ffi.zlib")
+local dir = ffi.abi("win") and require("ffi.win.dir") or require("ffi.posix.dir")
 local FileStream = require("stream.file_stream")
+local GameLocator = require("bos.game_locator")
 local timer = require("util.timer")
 
-local Archive = {}
-
 local ZIP_SIGNATURE = "\x50\x4b\x03\x04" -- 0x04034b50
+local CORE_PATH = (GameLocator.getAbsolutePath() or "FalloutTactics") .. "/core"
+
+local Archive = {}
 
 local function getArchiveContentInfo(pathToArchive)
   local stream = FileStream.open(pathToArchive)
@@ -47,12 +51,10 @@ local function getArchiveContentInfo(pathToArchive)
   return archiveMap
 end
 
-local CORE_PATH = "FalloutTactics/core/"
-
 local function getArchives()
   local archiveList = {}
 
-  for _, path in pairs(love.filesystem.getDirectoryItems(CORE_PATH)) do
+  for _, path in pairs(dir.list(CORE_PATH)) do
     if path:sub(-4) == ".bos" then
       table.insert(archiveList, CORE_PATH .. "/" .. path)
     end
@@ -91,26 +93,6 @@ function Archive.stream(filePath)
   stream:seek(fileMeta.offsetOfRawData)
 
   return stream, fileMeta.compressedSize
-end
-
-local COMPRESSION_METHOD_NONE = 0
-
-function Archive.read(filePath)
-  local stream = Archive.stream(filePath)
-  local entry = allArchivedFiles[filePath]
-  local chunk
-
-  if entry.compressionMethod == COMPRESSION_METHOD_NONE then
-    chunk = stream:read(entry.compressedSize)
-  else
-    local byteData = stream:read("data", entry.compressedSize)
-
-    chunk = assert(zlib.uncompress(byteData, entry.originalSize))
-  end
-
-  stream:close()
-
-  return chunk
 end
 
 return Archive

@@ -152,9 +152,9 @@ local function readCollectionData(self)
 
   if isCompressed then
     local uncompressedSize = stream:readUint()
-    local byteData = stream:readByteData(getChunkSize(self, streamSize))
+    local buffer, bufferSize = stream:readBuffer(getChunkSize(self, streamSize))
 
-    chunk = PointerWrapper.fromFFIArray(assert(zlib.uncompress(byteData, uncompressedSize)))
+    chunk = PointerWrapper.fromFFIArray(assert(zlib.uncompress(buffer + 0, bufferSize, uncompressedSize)))
   else
     chunk = PointerWrapper.fromByteData(stream:readByteData(getChunkSize(self, streamSize)))
   end
