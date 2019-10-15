@@ -141,13 +141,20 @@ local function getChunkSize(self, defaultSize)
   return (self.cursorEnd or defaultSize) - self.cursor
 end
 
-local function readCollectionData(self)
+local Collection = Object:extend()
+
+Collection.TYPE_PLAIN = string.byte("1")
+Collection.TYPE_COMPRESSED = string.byte("2")
+
+function Collection:_readRawData()
   local stream, streamSize = BOSArchive.stream(self.contentPath)
 
   stream:seek(self.cursor + stream:tell())
   stream:expectSignature("<spranim_img>\0")
 
-  local isCompressed = stream:readUshort() == 50
+  self.type = stream:readUshort()
+
+  local isCompressed = self.type == Collection.TYPE_COMPRESSED
   local chunk
 
   if isCompressed then
@@ -164,22 +171,20 @@ local function readCollectionData(self)
   return chunk
 end
 
-local function getCollectionData(self)
+function Collection:_getRawData()
   if self.rawChunk then
     return self.rawChunk
   end
 
-  self.rawChunk = readCollectionData(self)
+  self.rawChunk = self:_readRawData()
 
   return self.rawChunk
 end
 
-local Collection = Object:extend()
-
 local math_ceil = math.ceil
 
 function Collection:decodeImages()
-  local stream = BufferStream.fromPointerWrapper(getCollectionData(self))
+  local stream = BufferStream.fromPointerWrapper(self:_getRawData())
   local palettes = self.palettes
   local images = self.images
   local points = self.points
@@ -213,7 +218,7 @@ function Collection:decodeImages()
 end
 
 function Collection:preLoad()
-  local stream = BufferStream.fromPointerWrapper(getCollectionData(self))
+  local stream = BufferStream.fromPointerWrapper(self:_getRawData())
   local palettes = self.palettes
   local images = self.images
   local points = self.points
@@ -259,11 +264,10 @@ function Collection:preLoad()
   stream:close()
 end
 
-function Collection:decodeImage(imageId)
-  local stream = BufferStream.fromPointerWrapper(getCollectionData(self))
+function Collection:decodeImage(imageId, paletteId)
+  local stream = BufferStream.fromPointerWrapper(self:_getRawData())
   local cursor = self.imageCursors[imageId]
   local imageCount = self.frameCount * self.dirCount
-  local paletteId = math_ceil(imageId / imageCount)
 
   stream:seek(cursor)
 
@@ -293,7 +297,7 @@ function Sprite:preLoad(contentPath)
     stream:readByte()
   }
 
-  swap(bbox, 2, 3)
+  bbox[2], bbox[3] = bbox[3], bbox[2]
 
   local offsetX, offsetY = stream:readUint(), stream:readUint()
   local bboxScreenX, bboxScreenY = worldToScreen(bbox[1], bbox[2])

@@ -19,6 +19,7 @@ function love.load()
 
   timer.start("parse_sprite")
   local testSprite = Sprite.loadFromArchive("characters/LeatherMale.spr")
+  --local testSprite = Sprite.loadFromArchive("weapons/Melee/Hammer.spr")
   timer.finish("parse_sprite")
 
   print("bbox:", unpack(testSprite.bbox))
@@ -82,10 +83,15 @@ function love.draw()
     local rect = collection.rects[rectId]
 
     for layerId = 0, 3 do
-      local texId = dirId * frameCount + layerId * imageCount + frameId + 1
+      local texId
+      if collection.type == 50 then
+        texId = dirId * frameCount + layerId * imageCount + frameId + 1
+      else
+        texId = (frameId * dirCount + dirId) * 4 + layerId + 1
+      end
 
       if collection.images[texId] == 0 then
-        collection:decodeImage(texId)
+        collection:decodeImage(texId, layerId + 1)
       end
 
       local tex = collection.images[texId]
@@ -138,10 +144,15 @@ function love.draw()
       local rect = collection.rects[rectId]
 
       for layerId = 0, 3 do
-        local texId = dirId * frameCount + layerId * imageCount + frameId + 1
+        local texId
+        if collection.type == 50 then
+          texId = dirId * frameCount + layerId * imageCount + frameId + 1
+        else
+          texId = (frameId * dirCount + dirId) * 4 + layerId + 1
+        end
 
         if collection.images[texId] == 0 then
-          collection:decodeImage(texId)
+          collection:decodeImage(texId, layerId + 1)
         end
 
         local tex = collection.images[texId]
